@@ -1,98 +1,63 @@
 const Transaction = require("../models/Transaction");
-const Month= require("../models/Month");
+const Month = require("../models/Month");
+
 function getStartOfCurrentWeek() {
   const now = new Date();
-  const dayOfWeek = now.getDay(); // Sunday = 0, Monday = 1, ..., Saturday = 6
-  const daysToSunday = dayOfWeek; // Distance to the previous Sunday
+  const dayOfWeek = now.getDay();
+  const daysToSunday = dayOfWeek;
   const startOfWeek = new Date(now);
-  startOfWeek.setHours(0, 0, 0, 0); // Clear time part
-  startOfWeek.setDate(now.getDate() - daysToSunday); // Go back to last Sunday
+  startOfWeek.setHours(0, 0, 0, 0);
+  startOfWeek.setDate(now.getDate() - daysToSunday);
   return startOfWeek;
 }
 
 function getStartOfCurrentDay() {
   const now = new Date();
-  now.setHours(0, 0, 0, 0); // Set time to midnight
+  now.setHours(0, 0, 0, 0);
   return now;
 }
-module.exports.getMonths=async(req,res)=>{
-  const months = await Month.find();
-  res.status(200).send(months);
 
-}
-module.exports.getCurrentMonthTotals=async (req,res)=>{
-  const now = new Date();
-  const month=now.getMonth()+1;
-  const year=now.getFullYear();
-
-  const CurrentMonth=await Month.findOne({
-    year: year,
-    month: month,
-  })
-
-
-  if (!CurrentMonth) {
-    return res.status(404).json({ error: "No such month found" });
+module.exports.getMonths = async (req, res) => {
+  try {
+    const months = await Month.find();
+    res.status(200).json(months);
+  } catch (error) {
+    console.error("Error fetching months:", error);
+    res.status(500).json({ error: "Server error" });
   }
-  res.status(200).send({
-    totalPayed: CurrentMonth.totalPayed,
-    totalEarnings: CurrentMonth.totalEarnings,
-    totalProfit: CurrentMonth.totalProfit,
-  });
-}
-
-module.exports.getCurrentWeekTotals = async (req,res) => {
-
-  const startOfWeek = getStartOfCurrentWeek();
-  console.log("before")
-
-  const results = await Transaction.aggregate([
-    {
-      $match: {
-        transactionTime: { $gte: startOfWeek }, // Only include transactions from the start of the month
-      },
-    },
-    {
-      $group: {
-        _id: null,
-        totalPaid: { $sum: "$TotalPayed" },
-        totalEarnings: { $sum: "$totalAfterDiscount" },
-        totalProfit: { $sum: "$profit" },
-      },
-    },
-  ]);
-  console.log("after");
-
-
-  // Format results
-    const totals = results[0] || {
-      totalPaid: 0,
-      totalEarnings: 0,
-      totalProfit: 0,
-    };
-    res.json(totals);
-  
 };
 
+module.exports.getCurrentMonthTotals = async (req, res) => {
+  try {
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
 
-module.exports.getSepecificMonth=async(req,res)=>{
-  const { month, year } = req.params;
-  console.log(month, year);
-  const selectedMonth =await Month.findOne({ month: month, year: year});
-  res.json(selectedMonth)
+    const currentMonth = await Month.findOne({ year, month });
 
-}
+    if (!currentMonth) {
+      return res.status(404).json({ error: "No such month found" });
+    }
 
+    res.status(200).json({
+      totalPayed: currentMonth.totalPayed,
+      totalEarnings: currentMonth.totalEarnings,
+      totalProfit: currentMonth.totalProfit,
+    });
+  } catch (error) {
+    console.error("Error fetching current month totals:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+};
 
-module.exports.getCurrentDayTotals = async (req, res) => {
-    
-    const startOfDay = getStartOfCurrentDay();
-    console.log("Calculating totals from the start of the day");
+module.exports.getCurrentWeekTotals = async (req, res) => {
+  try {
+    const startOfWeek = getStartOfCurrentWeek();
 
     const results = await Transaction.aggregate([
       {
         $match: {
-          transactionTime: { $gte: startOfDay }, // Only include transactions from the start of the day
+          transactionTime: { $gte: startOfWeek },
         },
       },
       {
@@ -105,86 +70,87 @@ module.exports.getCurrentDayTotals = async (req, res) => {
       },
     ]);
 
-    // Format and send results
     const totals = results[0] || {
       totalPaid: 0,
       totalEarnings: 0,
       totalProfit: 0,
     };
-    res.json(totals);
 
+    res.status(200).json(totals);
+  } catch (error) {
+    console.error("Error fetching current week totals:", error);
+    res.status(500).json({ error: "Server error" });
+  }
 };
 
+module.exports.getSepecificMonth = async (req, res) => {
+  try {
+    const { month, year } = req.params;
 
-module.exports.getTotalFromTo = async (req, res) => {
-  // Extract 'from' and 'to' parameters from the request
-  const { fromMonth, fromYear, toMonth, toYear } = req.params;
+    const selectedMonth = await Month.findOne({ month, year });
 
-  // Parse the month and year from the request
-  const parsedFromMonth = parseInt(fromMonth) - 1; // Month is 0-indexed
-  const parsedFromYear = parseInt(fromYear);
-  const parsedToMonth = parseInt(toMonth) - 1; // Month is 0-indexed
-  const parsedToYear = parseInt(toYear);
-
-  // Create date objects for the start and end of the period
-  const startDate = new Date(parsedFromYear, parsedFromMonth, 1); // Start of 'from' month
-  const endDate = new Date(parsedToYear, parsedToMonth + 1, 0); // End of 'to' month
-
-  // Perform aggregation to get total amounts
-  const results = await Transaction.aggregate([
-    {
-      $match: {
-        transactionTime: {
-          $gte: startDate, // Greater than or equal to start date
-          $lte: endDate, // Less than or equal to end date
-        },
-      },
-    },
-    {
-      $group: {
-        _id: null,
-        totalPaid: { $sum: "$TotalPayed" },
-        totalAfterDiscount: { $sum: "$totalAfterDiscount" },
-        totalProfit: { $sum: "$profit" },
-      },
-    },
-  ]);
-
-  // Format the results
-  const totals = results[0] || {
-    totalPaid: 0,
-    totalAfterDiscount: 0,
-    totalProfit: 0,
-  };
-
-  // Send the response
-  res.status(200).json(totals);
-};
-
-
-
-
-module.exports.getTotalsForCertainDate = async (req, res) => {
-    const { day, month, year } = req.params;
-
-    // Validate input
-    if (!day || !month || !year) {
-      return res
-        .status(400)
-        .json({ error: "Day, month, and year are required." });
+    if (!selectedMonth) {
+      return res.status(404).json({ error: "Month not found" });
     }
 
-    // Create date objects for the start and end of the day
-    const startDate = new Date(year, month - 1, day); // Start of the specified day
-    const endDate = new Date(year, month - 1, day + 1); // Start of the next day
+    res.status(200).json(selectedMonth);
+  } catch (error) {
+    console.error("Error fetching specific month:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+};
 
-    // Perform aggregation to get total amounts
+module.exports.getCurrentDayTotals = async (req, res) => {
+  try {
+    const startOfDay = getStartOfCurrentDay();
+
+    const results = await Transaction.aggregate([
+      {
+        $match: {
+          transactionTime: { $gte: startOfDay },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalPaid: { $sum: "$TotalPayed" },
+          totalEarnings: { $sum: "$totalAfterDiscount" },
+          totalProfit: { $sum: "$profit" },
+        },
+      },
+    ]);
+
+    const totals = results[0] || {
+      totalPaid: 0,
+      totalEarnings: 0,
+      totalProfit: 0,
+    };
+
+    res.status(200).json(totals);
+  } catch (error) {
+    console.error("Error fetching current day totals:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+module.exports.getTotalFromTo = async (req, res) => {
+  try {
+    const { fromMonth, fromYear, toMonth, toYear } = req.params;
+
+    const parsedFromMonth = parseInt(fromMonth) - 1;
+    const parsedFromYear = parseInt(fromYear);
+    const parsedToMonth = parseInt(toMonth) - 1;
+    const parsedToYear = parseInt(toYear);
+
+    const startDate = new Date(parsedFromYear, parsedFromMonth, 1);
+    const endDate = new Date(parsedToYear, parsedToMonth + 1, 0);
+
     const results = await Transaction.aggregate([
       {
         $match: {
           transactionTime: {
-            $gte: startDate, // Greater than or equal to start date
-            $lt: endDate, // Less than the start of the next day
+            $gte: startDate,
+            $lte: endDate,
           },
         },
       },
@@ -198,13 +164,60 @@ module.exports.getTotalsForCertainDate = async (req, res) => {
       },
     ]);
 
-    // Format results
     const totals = results[0] || {
       totalPaid: 0,
       totalAfterDiscount: 0,
       totalProfit: 0,
     };
 
-    // Send response
     res.status(200).json(totals);
-  } ;
+  } catch (error) {
+    console.error("Error fetching totals from range:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+module.exports.getTotalsForCertainDate = async (req, res) => {
+  try {
+    const { day, month, year } = req.params;
+
+    if (!day || !month || !year) {
+      return res
+        .status(400)
+        .json({ error: "Day, month, and year are required." });
+    }
+
+    const startDate = new Date(year, month - 1, day);
+    const endDate = new Date(year, month - 1, day + 1);
+
+    const results = await Transaction.aggregate([
+      {
+        $match: {
+          transactionTime: {
+            $gte: startDate,
+            $lt: endDate,
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalPaid: { $sum: "$TotalPayed" },
+          totalAfterDiscount: { $sum: "$totalAfterDiscount" },
+          totalProfit: { $sum: "$profit" },
+        },
+      },
+    ]);
+
+    const totals = results[0] || {
+      totalPaid: 0,
+      totalAfterDiscount: 0,
+      totalProfit: 0,
+    };
+
+    res.status(200).json(totals);
+  } catch (error) {
+    console.error("Error fetching totals for certain date:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+};

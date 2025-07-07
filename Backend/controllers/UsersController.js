@@ -102,8 +102,7 @@ module.exports.login = async (req, res) => {
   });
 };
 
-const jwt = require("jsonwebtoken");
-const User = require("../models/User");
+
 
 module.exports.refreshToken = async (req, res) => {
   const cookies = req.cookies;
@@ -131,7 +130,6 @@ module.exports.refreshToken = async (req, res) => {
 };
 
 
-const User = require("../models/User");
 
 module.exports.logout = async (req, res) => {
   const cookies = req.cookies;

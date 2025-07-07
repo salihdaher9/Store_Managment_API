@@ -129,3 +129,29 @@ module.exports.refreshToken = async (req, res) => {
     res.json({ accessToken });
   });
 };
+
+
+const User = require("../models/User");
+
+module.exports.logout = async (req, res) => {
+  const cookies = req.cookies;
+  if (!cookies?.jwt) return res.sendStatus(204); // No cookie — already logged out
+
+  const refreshToken = cookies.jwt;
+
+  // Find the user by refresh token
+  const user = await User.findOne({ refreshToken });
+  if (user) {
+    user.refreshToken = null; // Remove token from DB
+    await user.save();
+  }
+
+  // Clear the cookie on client
+  res.clearCookie("jwt", {
+    httpOnly: true,
+    secure: true, // use only in production (HTTPS)
+    sameSite: "Strict",
+  });
+
+  res.sendStatus(204); // Success, no content
+};

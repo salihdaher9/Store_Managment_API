@@ -1,13 +1,13 @@
-# 🛍️ Mobile App Backend for Local Business
+# 🛍️  App Backend for A Local Business
 
-This is the backend service for a mobile inventory and transaction app designed for a local business. It automates inventory tracking, profit calculations, and supports role-based access for efficient store management.
-
+This is the backend service for an inventory and transaction app designed for a local business. It automates inventory tracking, profit calculations, and supports role-based access for efficient store management.
+this backend is used by one business in my city!
 ---
 
 ## 🚀 Features
 
 - ✅ RESTful API built with **Node.js** and **Express**
-- 🔐 **Authentication & Authorization** with **JWT** (owner and 5 employees with role-based access)
+- 🔐 **Authentication & Authorization** with **JWT** (owner and 5 employees with Admin/User role-based access)
 - 📈 **Automated Profit & Inventory Tracking** – reduces manual work by 90%
 - ⚡ **50% Faster In-Store Transactions**
 - 📦 Optimized **MongoDB** with indexing, aggregation, and pagination

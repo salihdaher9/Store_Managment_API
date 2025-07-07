@@ -53,7 +53,7 @@ module.exports.register = async (req, res) => {
 
 
 module.exports.login = async (req, res) => {
-
+  const cookies = req.cookies;
   const { username, password } = req.body;
 
   const user = await User.findOne({ username });
@@ -70,30 +70,48 @@ module.exports.login = async (req, res) => {
     throw error;
   }
 
-  // Access token 
+  // Generate access token
   const accessToken = jwt.sign(
     { id: user._id, username: user.username, role: user.role },
     process.env.JWT_SECRET,
     { expiresIn: "15m" }
   );
 
-  // refresh token 
-  const refreshToken = jwt.sign(
+  // Generate refresh token
+  const newRefreshToken = jwt.sign(
     { id: user._id },
     process.env.REFRESH_TOKEN_SECRET,
     { expiresIn: "7d" }
   );
 
-  user.refreshToken = refreshToken;
+  // Filter out any existing refresh token (if present)
+  let newRefreshTokenArray = user.refreshTokens;
+  if (cookies?.jwt) {
+    newRefreshTokenArray = user.refreshTokens.filter(
+      (rt) => rt !== cookies.jwt
+    );
+
+    // Clear old cookie
+    res.clearCookie("jwt", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "Strict",
+    });
+  }
+
+  // Add new refresh token to the array
+  user.refreshTokens = [...newRefreshTokenArray, newRefreshToken];
   await user.save();
 
-  res.cookie("jwt", refreshToken, {
+  // Set the new refresh token in cookie
+  res.cookie("jwt", newRefreshToken, {
     httpOnly: true,
-    secure: true, 
+    secure: true,
     sameSite: "Strict",
-    maxAge: 7 * 24 * 60 * 60 * 1000, 
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   });
 
+  // Send access token + user info
   res.json({
     accessToken,
     id: user._id,
@@ -102,36 +120,86 @@ module.exports.login = async (req, res) => {
   });
 };
 
-const jwt = require("jsonwebtoken");
-const User = require("../models/User");
+
 
 module.exports.refreshToken = async (req, res) => {
   const cookies = req.cookies;
-  if (!cookies?.jwt) return res.sendStatus(401); // No refresh token sent
+  if (!cookies?.jwt) return res.sendStatus(401);
 
-  const refreshToken = cookies.jwt;
+  const oldRefreshToken = cookies.jwt;
 
-  // Find user with that refresh token
-  const user = await User.findOne({ refreshToken });
-  if (!user) return res.sendStatus(403); // Token not found in DB
-
-  // Verify refresh token
-  jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (err, decoded) => {
-    if (err || user._id.toString() !== decoded.id) return res.sendStatus(403);
-
-    // Issue new access token
-    const accessToken = jwt.sign(
-      { id: user._id, username: user.username, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: "15m" }
-    );
-
-    res.json({ accessToken });
+  res.clearCookie("jwt", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "Strict",
   });
+
+  const user = await User.findOne({ refreshTokens: oldRefreshToken });
+
+  //  Reuse detection
+  if (!user) {
+    jwt.verify(
+      oldRefreshToken,
+      process.env.REFRESH_TOKEN_SECRET,
+      async (err, decoded) => {
+        if (err) return res.sendStatus(403);
+
+        console.log("Refresh token reuse detected for user:", decoded.id);
+
+        const hackedUser = await User.findById(decoded.id);
+        if (hackedUser) {
+          hackedUser.refreshTokens = [];
+          await hackedUser.save();
+        }
+
+        return res.sendStatus(403);
+      }
+    );
+    return;
+  }
+  
+  // Valid token — rotate it
+  jwt.verify(
+    oldRefreshToken,
+    process.env.REFRESH_TOKEN_SECRET,
+    async (err, decoded) => {
+      if (err || user._id.toString() !== decoded.id) return res.sendStatus(403);
+
+      // Remove the used token
+      user.refreshTokens = user.refreshTokens.filter(
+        (token) => token !== oldRefreshToken
+      );
+
+      const newRefreshToken = jwt.sign(
+        { id: user._id },
+        process.env.REFRESH_TOKEN_SECRET,
+        { expiresIn: "7d" }
+      );
+
+      user.refreshTokens.push(newRefreshToken);
+      await user.save();
+
+      // Set the new cookie
+      res.cookie("jwt", newRefreshToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "Strict",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+
+      // Issue new access token
+      const accessToken = jwt.sign(
+        { id: user._id, username: user.username, role: user.role },
+        process.env.JWT_SECRET,
+        { expiresIn: "15m" }
+      );
+
+      res.json({ accessToken });
+    }
+  );
 };
 
 
-const User = require("../models/User");
 
 module.exports.logout = async (req, res) => {
   const cookies = req.cookies;
@@ -140,9 +208,9 @@ module.exports.logout = async (req, res) => {
   const refreshToken = cookies.jwt;
 
   // Find the user by refresh token
-  const user = await User.findOne({ refreshToken });
+  const user = await User.findOne({ refreshTokens: refreshToken });
   if (user) {
-    user.refreshToken = null; // Remove token from DB
+    user.refreshTokens = user.refreshTokens.filter(rt =>rt!==refreshToken); // Remove token from DB
     await user.save();
   }
 

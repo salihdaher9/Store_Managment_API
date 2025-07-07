@@ -2,6 +2,7 @@ const User = require("../models/User");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 
+
 module.exports.GetUsers = async (req, res) => {
   try {
     const users = await User.find();
@@ -50,38 +51,54 @@ module.exports.register = async (req, res) => {
   }
 };
 
+
 module.exports.login = async (req, res) => {
-  try {
-    const { username, password } = req.body;
-    if (!username || !password) {
-      return res
-        .status(400)
-        .json({ error: "Username and password are required" });
-    }
 
-    const user = await User.findOne({ username });
-    if (!user) {
-      return res.status(401).json({ error: "Invalid username or password" });
-    }
+  const { username, password } = req.body;
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ error: "Invalid username or password" });
-    }
-
-    const AccessToken = jwt.sign(
-      { id: user._id, username: user.username, role: user.role },
-      process.env.JWT_SECRET
-    );
-
-    res.status(200).json({
-      AccessToken,
-      id: user._id,
-      username: user.username,
-      role: user.role,
-    });
-  } catch (error) {
-    console.error("Error logging in:", error);
-    res.status(500).json({ error: "Server error" });
+  const user = await User.findOne({ username });
+  if (!user) {
+    const error = new Error("Resource not found");
+    error.status = 401;
+    throw error;
   }
+
+  const isMatch = await bcrypt.compare(password, user.password);
+  if (!isMatch) {
+    const error = new Error("Resource not found");
+    error.status = 401;
+    throw error;
+  }
+
+  // Access token 
+  const accessToken = jwt.sign(
+    { id: user._id, username: user.username, role: user.role },
+    process.env.JWT_SECRET,
+    { expiresIn: "15m" }
+  );
+
+  // refresh token 
+  const refreshToken = jwt.sign(
+    { id: user._id },
+    process.env.REFRESH_TOKEN_SECRET,
+    { expiresIn: "7d" }
+  );
+
+  user.refreshToken = refreshToken;
+  await user.save();
+
+  res.cookie("jwt", refreshToken, {
+    httpOnly: true,
+    secure: true, 
+    sameSite: "Strict",
+    maxAge: 7 * 24 * 60 * 60 * 1000, 
+  });
+
+  res.json({
+    accessToken,
+    id: user._id,
+    username: user.username,
+    role: user.role,
+  });
 };
+

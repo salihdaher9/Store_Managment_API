@@ -32,11 +32,12 @@ db.once("open", () => {
 const app = express();
 console.log("Before trust proxy");
 
-app.set("trust proxy", 1); // trust the Render proxy
 console.log("After trust proxy");
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // Middleware for parsing URL-encoded bodies
+const cookieParser = require("cookie-parser");
+app.use(cookieParser());
 
 app.use(helmet());
 

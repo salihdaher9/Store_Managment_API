@@ -1,6 +1,6 @@
 # 🛍️  App Backend for A Local Business
 
-This is the backend service for a  inventory and transaction app designed for a local business. It automates inventory tracking, profit calculations, and supports role-based access for efficient store management.
+This is the backend service for an inventory and transaction app designed for a local business. It automates inventory tracking, profit calculations, and supports role-based access for efficient store management.
 this backend is used by one business in my city!
 ---
 

@@ -9,6 +9,7 @@ router.get('/',Authinticate,WrapAsync(UsersController.GetUsers));
 router.post("/", WrapAsync(UsersController.register));
 router.get("/:id", Authinticate, WrapAsync(UsersController.GetUser)); 
 router.post("/login",WrapAsync(UsersController.login));
+router.get("/refresh", WrapAsync(UsersController.refreshToken));
 
 
 

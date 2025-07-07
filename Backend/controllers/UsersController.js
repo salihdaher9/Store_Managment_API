@@ -102,3 +102,30 @@ module.exports.login = async (req, res) => {
   });
 };
 
+const jwt = require("jsonwebtoken");
+const User = require("../models/User");
+
+module.exports.refreshToken = async (req, res) => {
+  const cookies = req.cookies;
+  if (!cookies?.jwt) return res.sendStatus(401); // No refresh token sent
+
+  const refreshToken = cookies.jwt;
+
+  // Find user with that refresh token
+  const user = await User.findOne({ refreshToken });
+  if (!user) return res.sendStatus(403); // Token not found in DB
+
+  // Verify refresh token
+  jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (err, decoded) => {
+    if (err || user._id.toString() !== decoded.id) return res.sendStatus(403);
+
+    // Issue new access token
+    const accessToken = jwt.sign(
+      { id: user._id, username: user.username, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" }
+    );
+
+    res.json({ accessToken });
+  });
+};
